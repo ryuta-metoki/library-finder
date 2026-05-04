@@ -17,17 +17,20 @@ export default async function handler(req, res) {
   }
 
   try {
-    const params = new URLSearchParams({ appkey, geocode, limit, format: 'json' });
+    // CALIL APIはJSONP形式で返すため、callbackを指定してテキストで受け取る
+    const cbName = '__calil__';
+    const params = new URLSearchParams({ appkey, geocode, limit, format: 'json', callback: cbName });
     const response = await fetch(`https://api.calil.jp/library?${params}`);
 
     if (!response.ok) {
       return res.status(502).json({ error: 'CALIL APIエラー' });
     }
 
-    const data = await response.json();
+    // JSONP → JSON に変換: "__calil__([...])" → "[...]"
+    const text = await response.text();
+    const jsonStr = text.replace(new RegExp(`^${cbName}\\(`), '').replace(/\);?\s*$/, '');
+    const data = JSON.parse(jsonStr);
 
-    // CORSヘッダー（同一オリジンのみ許可）
-    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
     res.setHeader('Cache-Control', 's-maxage=300'); // 5分キャッシュ
     res.status(200).json(data);
   } catch (e) {
