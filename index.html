@@ -33,29 +33,13 @@
       display: flex;
       align-items: center;
       gap: 12px;
-      flex-wrap: wrap;
     }
 
     header h1 {
       font-size: 1.1rem;
       font-weight: 700;
       white-space: nowrap;
-      flex-shrink: 0;
     }
-
-    #apikey {
-      flex: 1;
-      min-width: 160px;
-      padding: 6px 11px;
-      border: none;
-      border-radius: 6px;
-      font-size: 0.85rem;
-      outline: none;
-      background: rgba(255,255,255,.15);
-      color: #fff;
-    }
-    #apikey::placeholder { color: rgba(255,255,255,.5); }
-    #apikey:focus { background: rgba(255,255,255,.25); }
 
     /* ── 検索行 ── */
     .search-row {
@@ -90,10 +74,7 @@
     }
     .btn:disabled { opacity: .5; cursor: default; }
 
-    #locationBtn {
-      background: #f0a500;
-      color: #fff;
-    }
+    #locationBtn { background: #f0a500; color: #fff; }
     #locationBtn:hover:not(:disabled) { background: #d49000; }
 
     #gpsBtn {
@@ -110,12 +91,7 @@
     }
 
     /* ── メインレイアウト ── */
-    main {
-      display: flex;
-      flex: 1;
-      overflow: hidden;
-    }
-
+    main { display: flex; flex: 1; overflow: hidden; }
     #map { flex: 3; min-width: 0; }
 
     /* ── サイドバー ── */
@@ -212,12 +188,10 @@
     .popup-name { font-weight: 700; font-size: 0.95rem; margin-bottom: 4px; }
     .popup-link { color: #2c5f8a; font-size: 0.8rem; }
 
-    /* ── スクロールバー ── */
     #library-list::-webkit-scrollbar { width: 6px; }
     #library-list::-webkit-scrollbar-track { background: #f0f0f0; }
     #library-list::-webkit-scrollbar-thumb { background: #bbb; border-radius: 3px; }
 
-    /* ── レスポンシブ ── */
     @media (max-width: 640px) {
       main { flex-direction: column; }
       #map { flex: 1; min-height: 45dvh; }
@@ -230,10 +204,10 @@
 <header>
   <div class="header-top">
     <h1>📚 近くの図書館を探す</h1>
-    <input type="text" id="apikey" placeholder="CALIL APIキー" autocomplete="off" />
   </div>
   <div class="search-row">
-    <input type="text" id="locationInput" placeholder="地名・住所で検索（例: 渋谷区、札幌市北区）" autocomplete="off" />
+    <input type="text" id="locationInput"
+      placeholder="地名・住所で検索（例: 渋谷区、札幌市北区）" autocomplete="off" />
     <button class="btn" id="locationBtn">🔍 検索</button>
     <button class="btn" id="gpsBtn">📍 現在地</button>
     <span id="status"></span>
@@ -246,7 +220,7 @@
     <div id="sidebar-header">図書館一覧</div>
     <div id="library-list">
       <div class="empty-msg">
-        APIキーを入力して<br>地名を入力するか<br>「📍 現在地」で検索してください
+        地名を入力して「🔍 検索」か<br>「📍 現在地」で検索してください
       </div>
     </div>
   </div>
@@ -254,9 +228,6 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-  /* ─── 定数 ─── */
-  const LS_KEY_APPKEY = 'calil_appkey';
-
   /* ─── 地図初期化 ─── */
   const map = L.map('map').setView([35.6895, 139.6917], 13);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -265,20 +236,17 @@
   }).addTo(map);
 
   /* ─── 状態 ─── */
-  let markers    = [];
-  let activeIndex = -1;
+  let markers      = [];
+  let activeIndex  = -1;
   let centerMarker = null;
 
   /* ─── 要素 ─── */
-  const apikeyInput   = document.getElementById('apikey');
   const locationInput = document.getElementById('locationInput');
   const locationBtn   = document.getElementById('locationBtn');
   const gpsBtn        = document.getElementById('gpsBtn');
   const statusEl      = document.getElementById('status');
   const listEl        = document.getElementById('library-list');
   const headerEl      = document.getElementById('sidebar-header');
-
-  apikeyInput.value = localStorage.getItem(LS_KEY_APPKEY) || '';
 
   /* ─── ユーティリティ ─── */
   function setStatus(msg) { statusEl.textContent = msg; }
@@ -317,85 +285,66 @@
 
   /* ─── Nominatim ジオコーディング ─── */
   async function geocode(query) {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&accept-language=ja`;
+    const url  = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&accept-language=ja`;
     const res  = await fetch(url, { headers: { 'Accept-Language': 'ja' } });
     if (!res.ok) throw new Error('ジオコーディング失敗');
     const data = await res.json();
     if (!data.length) throw new Error(`「${query}」の場所が見つかりませんでした`);
-    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), displayName: data[0].display_name };
+    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
   }
 
-  /* ─── CALIL API（JSONP） ─── */
-  function fetchLibraries(lat, lng, appkey) {
-    return new Promise((resolve, reject) => {
-      const cbName = `calilCb_${Date.now()}`;
-      const script = document.createElement('script');
-      const params = new URLSearchParams({
-        appkey,
-        geocode: `${lng},${lat}`,
-        limit: 20,
-        format: 'json',
-        callback: cbName,
-      });
-      script.src = `https://api.calil.jp/library?${params}`;
-
-      const timer = setTimeout(() => { cleanup(); reject(new Error('タイムアウト')); }, 15000);
-
-      function cleanup() {
-        clearTimeout(timer);
-        delete window[cbName];
-        if (script.parentNode) script.parentNode.removeChild(script);
-      }
-
-      window[cbName] = data => { cleanup(); resolve(Array.isArray(data) ? data : []); };
-      script.onerror = () => { cleanup(); reject(new Error('CALIL API呼び出し失敗')); };
-      document.head.appendChild(script);
-    });
+  /* ─── CALIL API（サーバーサイドProxy経由） ─── */
+  // APIキーはサーバー（api/library.js）だけが知っている
+  async function fetchLibraries(lat, lng) {
+    const params = new URLSearchParams({ geocode: `${lng},${lat}`, limit: 20 });
+    const res    = await fetch(`/api/library?${params}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `サーバーエラー (${res.status})`);
+    }
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
   }
 
-  /* ─── マーカー・リストをクリア ─── */
+  /* ─── クリア ─── */
   function clearAll() {
     markers.forEach(({ marker }) => map.removeLayer(marker));
-    markers = [];
+    markers     = [];
     activeIndex = -1;
     listEl.innerHTML = '';
     if (centerMarker) { map.removeLayer(centerMarker); centerMarker = null; }
   }
 
-  /* ─── アイテムをアクティブ化 ─── */
+  /* ─── アクティブ化 ─── */
   function activate(index) {
     if (activeIndex === index) return;
-
     if (activeIndex >= 0) {
       markers[activeIndex].marker.setIcon(makeIcon(activeIndex + 1, false));
       document.getElementById(`lib-${activeIndex}`)?.classList.remove('active');
     }
-
     activeIndex = index;
     markers[index].marker.setIcon(makeIcon(index + 1, true));
     markers[index].marker.openPopup();
     map.panTo(markers[index].latlng);
-
     const el = document.getElementById(`lib-${index}`);
     if (el) { el.classList.add('active'); el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
   }
 
-  /* ─── 図書館を描画（共通処理） ─── */
-  async function renderLibraries(centerLat, centerLng, centerLabel, appkey) {
+  /* ─── 図書館描画（共通） ─── */
+  async function renderLibraries(centerLat, centerLng, centerLabel) {
     setStatus('図書館を検索中…');
 
     let libs;
     try {
-      libs = await fetchLibraries(centerLat, centerLng, appkey);
+      libs = await fetchLibraries(centerLat, centerLng);
     } catch (e) {
-      alert(`APIエラー: ${e.message}`);
+      alert(`エラー: ${e.message}`);
       setStatus(''); setBusy(false);
       return;
     }
 
     clearAll();
 
-    /* 中心マーカー */
     centerMarker = L.circleMarker([centerLat, centerLng], {
       radius: 8, color: '#e44', fillColor: '#e44', fillOpacity: 0.9, weight: 2,
     }).addTo(map).bindPopup(`📍 ${centerLabel}`);
@@ -407,7 +356,6 @@
       return;
     }
 
-    /* 距離付与→ソート */
     const withDist = libs
       .filter(lib => lib.geocode)
       .map(lib => {
@@ -457,22 +405,12 @@
     map.fitBounds(bounds, { padding: [40, 40] });
     setStatus(`${withDist.length}件見つかりました`);
     setBusy(false);
-
     if (withDist.length > 0) activate(0);
-  }
-
-  /* ─── APIキーチェック ─── */
-  function getAppkey() {
-    const key = apikeyInput.value.trim();
-    if (!key) { alert('APIキーを入力してください。'); apikeyInput.focus(); return null; }
-    localStorage.setItem(LS_KEY_APPKEY, key);
-    return key;
   }
 
   /* ─── 地名検索 ─── */
   async function doLocationSearch() {
-    const appkey = getAppkey(); if (!appkey) return;
-    const query  = locationInput.value.trim();
+    const query = locationInput.value.trim();
     if (!query) { alert('検索する地名・住所を入力してください。'); locationInput.focus(); return; }
 
     setBusy(true);
@@ -487,13 +425,11 @@
       return;
     }
 
-    await renderLibraries(geo.lat, geo.lng, query, appkey);
+    await renderLibraries(geo.lat, geo.lng, query);
   }
 
   /* ─── 現在地検索 ─── */
   async function doGpsSearch() {
-    const appkey = getAppkey(); if (!appkey) return;
-
     setBusy(true);
     setStatus('現在地を取得中…');
 
@@ -510,14 +446,13 @@
       return;
     }
 
-    await renderLibraries(lat, lng, '現在地', appkey);
+    await renderLibraries(lat, lng, '現在地');
   }
 
   /* ─── イベント ─── */
   locationBtn.addEventListener('click', doLocationSearch);
   gpsBtn.addEventListener('click', doGpsSearch);
   locationInput.addEventListener('keydown', e => { if (e.key === 'Enter') doLocationSearch(); });
-  apikeyInput.addEventListener('keydown', e => { if (e.key === 'Enter') locationInput.focus(); });
 </script>
 </body>
 </html>
